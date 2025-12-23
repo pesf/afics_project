@@ -6,19 +6,11 @@ format: html
 ```{r setup, include=FALSE}
 # Knitr options
 knitr::opts_chunk$set(echo = TRUE, message = TRUE, warning = TRUE)
+library(readr); library(dplyr); library(lubridate); library(reticulate)
 
-# R packages
-library(readr)
-library(dplyr)
-library(lubridate)
-library(reticulate)
-
-# Point reticulate to your preferred Python environment
-# use_virtualenv("darts-env", required = FALSE)
-# use_condaenv("darts-conda", required = FALSE)
-
-# Ensure darts is available; uncomment to install into the active env
-# py_install("u8darts", pip = TRUE)
+# Use the conda env where you installed packages
+use_condaenv("darts-conda", required = TRUE)
+# use_virtualenv("darts-env", required = FALSE)  # leave commented
 ```
 
 ## Setup
@@ -48,7 +40,7 @@ sales_df <- readRDS(data_file) |>
   as_tibble() |>
   transmute(
     ds        = as.Date(date),
-    unique_id = id,         # keep as-is or paste(item_id, store_id, sep = "_")
+    unique_id = id,         # can paste(item_id, store_id, sep = "_")
     y         = units
   ) |>
   arrange(unique_id, ds) |>
@@ -68,6 +60,7 @@ sales_df <- sales_df |>
 ## Model Training (Python / darts)
 
 ```{python model}
+
 import os
 import pandas as pd
 from darts import TimeSeries
@@ -78,6 +71,10 @@ from darts.dataprocessing.transformers import Scaler
 # Receive data from R
 sales_df = r["sales_df"]
 
+# Ensure proper dtypes for darts
+sales_df["ds"] = pd.to_datetime(sales_df["ds"])
+sales_df["unique_id"] = sales_df["unique_id"].astype(str)
+sales_df["y"] = pd.to_numeric(sales_df["y"], errors="coerce")
 # Build list of TimeSeries objects, one per unique_id
 series_list = TimeSeries.from_group_dataframe(
     sales_df,
@@ -93,19 +90,10 @@ covariates_list = []
 use_covariates = True
 
 for ts in series_list:
-    # Generate date-based features (month, day-of-week)
-    cov = datetime_attribute_timeseries(
-        ts,
-        attribute="month",
-        one_hot=True
-    )
-    cov += datetime_attribute_timeseries(
-        ts,
-        attribute="dayofweek",
-        one_hot=True
-    )
-    cov = cov.with_columns_renamed({c: f"cal_{c}" for c in cov.columns})
-    cov = cov.slice_intersect(ts)  # align
+    cov = datetime_attribute_timeseries(ts, attribute="month", one_hot=True)
+    cov = cov.stack(datetime_attribute_timeseries(ts, attribute="dayofweek", one_hot=True))
+    cov = cov.with_columns_renamed(cov.columns, [f"cal_{c}" for c in cov.columns])
+    cov = cov.slice_intersect(ts)
     covariates_list.append(cov if use_covariates else None)
 
 # Scale targets (optional but recommended)
@@ -125,7 +113,7 @@ model = NBEATSModel(
 
 model.fit(
     series=series_list_scaled,
-    future_covariates=covariates_list if use_covariates else None,
+    past_covariates=covariates_list if use_covariates else None,
     verbose=True
 )
 ```
@@ -139,7 +127,7 @@ forecast_horizon = int(r["horizon"])
 forecasts_scaled = model.predict(
     n=forecast_horizon,
     series=series_list_scaled,
-    future_covariates=covariates_list if use_covariates else None,
+    past_covariates=covariates_list if use_covariates else None,
     verbose=True
 )
 
