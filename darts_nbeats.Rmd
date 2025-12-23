@@ -28,7 +28,7 @@ horizon <- 28
 # N-BEATS hyperparameters
 input_chunk_length  <- 28
 output_chunk_length <- 14
-n_epochs            <- 50
+n_epochs            <- 3
 ```
 
 ## Data Loading
@@ -175,6 +175,6 @@ output_path
 
 ## Notes
 
-- Update `data_file` to point to the CSV containing columns `ds`, `unique_id`, and `y`.
-- Adjust `use_covariates` or covariate definitions if you do not want calendar features.
-- Ensure your active Python environment has `u8darts`, `pandas`, `matplotlib`, and `torch` installed.
+- Update `data_file` to point to the CSV containing columns `ds`, `unique_id`, and `y`
+- Adjust `use_covariates` or covariate definitions if you do not want calendar features
+- Ensure your active Python environment has `u8darts`, `pandas`, `matplotlib`, and `torch` installed
